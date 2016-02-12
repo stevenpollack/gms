@@ -1,0 +1,75 @@
+swagger: "2.0"
+info:
+  version: 1.0.0
+  title: google-movies-scraper
+  description: A simple API to scrape google.com/movies.
+  termsOfService: http://swagger.io/terms/
+  contact:
+    name: Steven Pollack
+    email: steven@gnobel.com
+  license:
+    name: MIT
+    url: http://github.com/gruntjs/grunt/blob/master/LICENSE-MIT
+host: google-movies-scraper.herokuapp.com
+basePath: /
+schemes:
+  - http
+produces:
+  - application/json
+paths:
+  /movies:
+    get:
+      description: Return all theatres (and their showtimes) displayed in a call to google.com/movies.
+      parameters:
+        - name: near
+          in: query
+          description: where are the movie theatres located?
+          required: true
+          type: string
+          items:
+            type: string
+        - name: date
+          in: query
+          description: how many days from now are the desired showtimes? If not specified, 0 is assumed.
+          required: false
+          type: integer
+          format: int32
+      responses:
+        200:
+          description: pet response
+          schema:
+            type: array
+            items:
+              $ref: '#/definitions/Pet'
+        default:
+          description: unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+definitions:
+  Pet:
+    allOf:
+      - $ref: '#/definitions/NewPet'
+      - required:
+        - id
+        properties:
+          id:
+            type: integer
+            format: int64
+  NewPet:
+    required:
+      - name
+    properties:
+      name:
+        type: string
+      tag:
+        type: string
+  Error:
+    required:
+      - code
+      - message
+    properties:
+      code:
+        type: integer
+        format: int32
+      message:
+        type: string
