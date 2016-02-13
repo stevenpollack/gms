@@ -26,6 +26,7 @@ paths:
           description: where are the movie theatres located?
           required: true
           type: string
+          format: location
           items:
             type: string
         - name: date
@@ -36,33 +37,69 @@ paths:
           format: int32
       responses:
         200:
-          description: pet response
+          description: List of theatres
           schema:
             type: array
             items:
-              $ref: '#/definitions/Pet'
+              $ref: '#/definitions/Theatre'
         default:
           description: unexpected error
           schema:
             $ref: '#/definitions/Error'
 definitions:
-  Pet:
-    allOf:
-      - $ref: '#/definitions/NewPet'
-      - required:
-        - id
-        properties:
-          id:
-            type: integer
-            format: int64
-  NewPet:
+  Movie:
     required:
       - name
+      - showtimes
+      - warning_thrown
     properties:
       name:
         type: string
-      tag:
+        description: test
+      mid:
         type: string
+      misc_info:
+        type: string
+      rating:
+        type: string
+        default: ""
+      runtime:
+        type: integer
+        default: 0
+      showtimes:
+        type: array
+        items:
+          type: string
+        default: []
+      url:
+        type: string
+        default: ""
+      warning_thrown:
+        type: boolean
+  Theatre:
+    required:
+      - name
+      - warning_thrown
+    properties:
+      address:
+        type: string
+      name:
+        type: string
+      phone_number:
+        type: string
+      program:
+        type: array
+        items:
+          $ref: '#/definitions/Movie'
+      tid:
+        type: string
+        default: null
+      url:
+        type: string
+        default: ""
+      warning_thrown:
+        type: boolean
+  
   Error:
     required:
       - code
