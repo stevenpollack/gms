@@ -1,4 +1,4 @@
-from flask import Flask, request, json, Response
+from flask import Flask, request, json, Response, redirect
 import google_movies_scraper as gms
 import warnings
 
@@ -31,6 +31,11 @@ def get_showtimes():
         resp = Response(js, status=400, mimetype=mimetype)
         return(resp)
     
+@app.route('/')
+def route_to_apiary():
+    apiary_io = 'http://docs.googlemoviesscraper.apiary.io/'
+    return(redirect(apiary_io, code=302))
+
 
 if (__name__ == '__main__'):
     app.run(debug = True, host='0.0.0.0', port=5000)
