@@ -1,7 +1,7 @@
 ## google.com/movies scraper
 
 The API is hosted on apiary:
-[docs.googlemoviesscraper.apiary.io](docs.googlemoviesscraper.apiary.io) ***Warning: WIP!***
+[docs.googlemoviesscraper.apiary.io](http://docs.googlemoviesscraper.apiary.io)
 
 The app is hosted on heroku:
 [http://google-movies-scraper.herokuapp.com](http://google-movies-scraper.herokuapp.com)
