@@ -51,19 +51,19 @@ Because "we" (really, just me) want the the query results (and statistics) for a
  2. I call the [timezone API](https://developers.google.com/maps/documentation/timezone/intro)
   to get the UTC offset (in seconds) of `(lat, long)`.
   
- This cludginess may actually be worth the hassle since a UTC offset may implicitly handle DST
- problems. 
+This cludginess may actually be worth the hassle since a UTC offset may implicitly handle DST
+problems. 
  
- So, great!... Except, I want to be hitting google sparingly. Hence, the UTC Offset cache: for
- every value of `near`, the UTC offset is calculated once, and then saved in an
- [IronCache](http://dev.iron.io/cache/). This hashing is pretty naive, at the moment: I strip
- white space and commas from the `near`, and use that as the cache key. Thus, if you were to query
- `?near=Hinsdale,Montana` and `?near=Hinsdale,MT`, the cache lookup for the
- latter wouldn't find anything and a redundant set of UTC offset lookups would be performed,
- since `Hinsdale,MT` gets keyed as `hinsdalemt` and `Hinsdale,Montana` gets keyed as
- `hinsdalemontana`.
+So, great!... Except, I want to be hitting google sparingly. Hence, the UTC Offset cache: for
+every value of `near`, the UTC offset is calculated once, and then saved in an
+[IronCache](http://dev.iron.io/cache/). This hashing is pretty naive, at the moment: I strip
+white space and commas from the `near`, and use that as the cache key. Thus, if you were to query
+`?near=Hinsdale,Montana` and `?near=Hinsdale,MT`, the cache lookup for the
+latter wouldn't find anything and a redundant set of UTC offset lookups would be performed,
+since `Hinsdale,MT` gets keyed as `hinsdalemt` and `Hinsdale,Montana` gets keyed as
+`hinsdalemontana`.
  
- ### Caching Results
+### Caching Results
  
 Once we've figured out what the timezone for a particular value of `near` is, we want to
 cache the results of the scrape, and set the cached value to expire at the start of the next
