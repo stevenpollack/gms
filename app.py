@@ -1,43 +1,76 @@
 from flask import Flask, request, json, Response, redirect
 from requests import HTTPError
-import google_movies_scraper as gms
-import warnings
-import re
+from google_movies_scraper import extract_all_theatres_and_showtimes
+from re import sub
+from warnings import warn
 from iron_cache import IronCache
+from localization_functions import calculate_timeleft_in_day, determine_utc_offset
 
 # use iron_cache for quick and dirty caching...
 # rethinkdb might be smarter, but iron_cache is integrated
 # into heroku...
-cache = IronCache()
-default_cache_options = {
-    # set all keys to expire in 1 day
-    'expires_in': 60 * 60 * 24
-}
+#
+# Setup 3 caches, one for
+# 1. results
+# 2. query statistics
+# 3. location utc_offsets
+#
+# 1 & 2 should have expiring items
 query_results = IronCache(name='query_results')
 query_counter = IronCache(name='query_counter')
+utc_offsets = IronCache(name='utc_offsets')
 
-def get_showtimes_from_google_and_cache(near, days_from_now, cache_key, cache_options=default_cache_options):
+def calculate_expiration_time(near):
+    # use a 'normalized' version of `near` as the cache_key;
+    # the other caches append the `days_from_now` parameter to this
+    # value as the cache_key, but our timezone cache shouldn't care
+    # about this parameter
+    cache_key = sub('[ ,]*', '', near).lower()
     try:
-        showtimes = json.dumps(gms.extract_all_theatres_and_showtimes(near, days_from_now))
+        utc_offset = int(utc_offsets.get(key=cache_key).value)
+    except HTTPError:
+        utc_offset = determine_utc_offset(near)
+        utc_offsets.put(key=cache_key, value=str(utc_offset))
+
+    return(calculate_timeleft_in_day(utc_offset))
+
+def create_cache_key(near, days_from_now=None, separator='-'):
+    # The cache_key pattern is:
+    #     near_normalize + separator + days_from_now
+    # However: google ignores negative dates, which means that the
+    # results for days_from_now = -1 will be the same as
+    # days_from_now = -7, which means there's no reason to cache
+    # these as different results.
+    if (days_from_now is not None and int(days_from_now) < 0) or (days_from_now is None):
+        days_from_now = '0'
+
+    near_normalized = sub('[ ,]*', '', near).lower()
+
+    return near_normalized + separator + days_from_now
+
+def get_showtimes_from_google_and_cache(near, days_from_now, cache_key):
+    try:
+        showtimes = json.dumps(extract_all_theatres_and_showtimes(near, days_from_now))
         status = 200
         # populate caches
+        cache_options = {
+            'expires_in': calculate_expiration_time(near)
+        }
         query_results.put(key=cache_key, value=showtimes, options=cache_options)
         query_counter.put(key=cache_key, value=1, options=cache_options)
     except Exception as e:
-        warnings.warn(str(e))
+        warn(str(e))
         showtimes = json.dumps({'error': str(e)})
         status = 500  # internal server error
 
-    return (showtimes, status)
-
+    return showtimes, status
 
 def get_showtimes_from_cache(cache_key):
     # iron_cache stores keys as long strings...
     showtimes = query_results.get(key=cache_key).value
     query_counter.increment(key=cache_key)
     status = 200
-
-    return (showtimes, status)
+    return showtimes, status
 
 app = Flask(__name__)
 @app.route('/')
@@ -51,32 +84,21 @@ def get_showtimes():
     days_from_now = request.args.get('date')
     mimetype = 'application/json'
 
+    # fail fast
     if near is None:
-        # fail fast
-        showtimes = js.dumps({'error': 'need to specify `near` parameter'})
+        showtimes = json.dumps({'error': 'need to specify `near` parameter'})
         status = 400
-
     else:
-        # sanitize near to remove white space and ,'s and bring to lower;
-        # we'll use this as one-half of the key for iron_cache
-        cache_key = '{0}-'.format(re.sub('[ ,]*', '', near).lower())
-
-        if days_from_now is not None:
-            # google ignores negative dates, which means that the results for
-            # days_from_now = -1 will be the same as days_from_now = -7, which
-            # means there's no reason to cache these as different results.
-            if int(days_from_now) < 0:
-                days_from_now = '0'
-
-            cache_key += days_from_now
-        else:
-            cache_key += '0'
-
         try:
+            cache_key = create_cache_key(near, days_from_now)
             showtimes, status = get_showtimes_from_cache(cache_key)
-            warnings.warn('Fetched results from cache with key: ' + cache_key)
+            warn('Fetched results from cache with key: ' + cache_key)
+        except ValueError as ve:
+            warn(str(ve))
+            showtimes = json.dumps({'error': '`date` must be a base-10 integer'})
+            status = 400
         except HTTPError as e:
-            warnings.warn(str(e))
+            warn(str(e))
             showtimes, status = get_showtimes_from_google_and_cache(near, days_from_now, cache_key)
 
     resp = Response(showtimes, status=status, mimetype=mimetype)

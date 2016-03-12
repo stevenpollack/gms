@@ -192,7 +192,7 @@ def extract_all_theatres_and_showtimes(near, days_from_now):
         'date': days_from_now
     }
     
-    parsed_req = BeautifulSoup(requests.get(starting_url, get_params).text, 'html.parser')
+    parsed_req = BeautifulSoup(requests.get(url=starting_url, params=get_params).text, 'html.parser')
     
     theatres_and_showtimes = extract_theatres_and_showtimes(parsed_req)
     next_page_url = extract_next_page_url(parsed_req)
