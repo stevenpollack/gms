@@ -40,6 +40,10 @@ def get_showtimes_from_cache(cache_key):
     return (showtimes, status)
 
 app = Flask(__name__)
+@app.route('/')
+def route_to_apiary():
+    apiary_io = 'http://docs.googlemoviesscraper.apiary.io/'
+    return (redirect(apiary_io, code=302))
 
 @app.route('/movies', methods=['GET'])
 def get_showtimes():
@@ -78,12 +82,5 @@ def get_showtimes():
     resp = Response(showtimes, status=status, mimetype=mimetype)
     return (resp)
 
-
-@app.route('/')
-def route_to_apiary():
-    apiary_io = 'http://docs.googlemoviesscraper.apiary.io/'
-    return (redirect(apiary_io, code=302))
-
-
 if (__name__ == '__main__'):
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5000)
