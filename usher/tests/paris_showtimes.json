@@ -1,0 +1,43 @@
+{
+  "info": "Forum des Halles, niveau - 3, place de la Rotonde, Paris, France",
+  "name": "UGC Ciné-Cité les Halles",
+  "showtimes": [
+    {
+      "mid": "3a838f92b2f59374",
+      "info": "Rated Tous publics",
+      "name": "Zootopia",
+      "runtime": 108,
+      "times": [
+        "20:20",
+        "22:30",
+        "09:15",
+        "11:30",
+        "13:50",
+        "16:00",
+        "18:10"
+      ],
+      "url": "/movies?near=Paris&mid=3a838f92b2f59374",
+      "warnings": []
+    },
+    {
+      "mid": "15da039f75e9a19f",
+      "info": "Rated tous publics - Subtitled in French",
+      "name": "Midnight Special",
+      "runtime": 111,
+      "times": [
+        "09:15",
+        "11:30",
+        "13:50",
+        "16:00",
+        "18:10",
+        "20:20",
+        "22:30"
+      ],
+      "url": "/movies?near=Paris&mid=15da039f75e9a19f",
+      "warnings": []
+    }
+  ],
+  "tid": "4f451a87a71bfa51",
+  "url": "/movies?near=Paris&tid=4f451a87a71bfa51",
+  "warnings": []
+}
