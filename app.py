@@ -16,7 +16,6 @@ from localization_functions import calculate_timeleft_in_day
 # 1 & 2 should have expiring items
 query_results = redis.from_url(os.environ.get('REDIS_URL'), 0)
 query_counter = redis.from_url(os.environ.get('REDIS_URL'), 1)
-utc_offsets = redis.from_url(os.environ.get('REDIS_URL'), 2)
 
 def calculate_expiration_time(near):
     locache_url = 'https://locache.herokuapp.com/'
