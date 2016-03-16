@@ -23,7 +23,10 @@ class Movie:
 
         info = movie_html.select_one('.info').get_text(strip=True).split(' - ', 1)
         self.runtime = info[0]
-        self.info = info[1]
+        try:
+            self.info = info[1]
+        except IndexError: # situation where no extra info is provided
+            self.info = None
 
         self.process_runtime()
         self.process_times()

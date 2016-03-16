@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import warnings # https://docs.python.org/3.5/library/exceptions.html
+from usher.theatre import Theatre
 
 def extract_theatres_and_showtimes(parsed_req):
     
@@ -100,70 +101,8 @@ def extract_theatres_and_showtimes(parsed_req):
     #~~~~~~~~~~~~~~~~~~
     # function body
     #~~~~~~~~~~~~~~~~~~
-    theatres = []
-    for theatre in parsed_req.body.select('.theater'):
+    theatres = [Theatre(theatre_html).to_json() for theatre_html in parsed_req.body.select('.theater')]
 
-        # extract theatre-level information (name, address, url, etc.)
-        description = theatre.select('.desc')
-
-        if (len(description) != 1):
-            raise AssertionError("theatre's 'description' has " + str(len(description)) + " entries -- expected 1.")
-
-        theatre_dict = extract_theatre_properties(description[0])    
-
-        # build the theatre program: an array of dictionaries, each dictionary
-        # corresponds to a particular movie
-        theatre_program = []
-        for movie in theatre.select('.showtimes .movie'):
-            movie_name_a = movie.select('.name a')[0]
-
-            movie_name, movie_href, movie_id, warning_thrown = extract_name_id_and_url(movie_name_a, 'movie')
-
-            movie_info = movie.select('.info')[0].get_text().split(' - ')
-            movie_runtime = movie_info[0]
-            movie_rating = None 
-            misc_info = None
-
-            if (len(movie_info) >= 2):
-                movie_rating = movie_info[1]
-
-                if (len(movie_info) > 2):
-                    misc_info = " - ".join(movie_info[2:])
-                    #warnings.warn(movie_name + "'s 'movie_info' has more entries than expected: " + ", ".join(movie_info))
-                    #warning_thrown = True
-
-            movie_showtimes = []
-            for showtime_span in movie.select('.times span[style^="color"]'):
-                # extract only the time (in case there are some weird characters)
-                extracted_showtime = showtime_span.get_text()
-                showtime_match = re.search('\d{1,2}:\d{2}', extracted_showtime)
-                if showtime_match:
-                    movie_showtimes.append(showtime_match.group())
-                else:
-                    warnings.warn("Couldn't extract showtime from input " + extracted_showtime)
-                    warning_thrown = True
-
-            movie_runtime, runtime_conversion_warning = runtime_to_minutes(movie_runtime)
-
-            if (runtime_conversion_warning):
-                warning_thrown = True
-
-            theatre_program.append(
-                {
-                    'name': movie_name,
-                    'url': movie_href,
-                    'mid': movie_id,
-                    'showtimes': movie_showtimes,
-                    'runtime': movie_runtime,
-                    'rating': movie_rating,
-                    'misc_info': misc_info,
-                    'warning_thrown': warning_thrown
-                }
-            )
-
-        theatre_dict['program'] = theatre_program
-        theatres.append(theatre_dict)
-        
     return(theatres)
 
 def extract_next_page_url(parsed_req):
