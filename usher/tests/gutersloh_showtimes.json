@@ -1,0 +1,42 @@
+[
+  {
+    "warnings": [],
+    "name": "CineStar - Der Filmpalast",
+    "tid": "83e15222811c890a",
+    "info": "Kaiserstr. 30, 33330 Gütersloh, Germany",
+    "url": "/movies?near=Gutersloh&tid=83e15222811c890a",
+    "showtimes": [
+      {
+        "name": "London Has Fallen",
+        "times": [
+          "20:15"
+        ],
+        "mid": "e26c6be0be6e3f7f",
+        "runtime": 99,
+        "info": "Rated Freigegeben ab 16 Jahren\u200e",
+        "url": "/movies?near=Gutersloh&mid=e26c6be0be6e3f7f",
+        "warnings": []
+      }
+    ]
+  },
+  {
+    "url": "/movies?near=Gutersloh&tid=ee945ddf0e6116df",
+    "showtimes": [
+      {
+        "info": "Rated Freigegeben ab 12 Jahren\u200e",
+        "warnings": [],
+        "runtime": 128,
+        "url": "/movies?near=Gutersloh&mid=78bce368cd17653",
+        "mid": "78bce368cd17653",
+        "name": "Das Tagebuch der Anne Frank",
+        "times": [
+          "17:30"
+        ]
+      }
+    ],
+    "info": "Rathauspassage, 59555 Lippstadt, Germany - 02941 3344",
+    "warnings": [],
+    "tid": "ee945ddf0e6116df",
+    "name": "Cinema-Studio"
+  }
+]
