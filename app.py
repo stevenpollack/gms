@@ -1,83 +1,22 @@
-import os
-import re
-import redis
-import requests
-import warnings
+import os, re, redis, requests, warnings
 from flask import Flask, request, json, Response, redirect
-
-from google_movies_scraper import extract_all_theatres_and_showtimes
+from usher.googlemovies import GoogleMovies
 from localization_functions import calculate_timeleft_in_day
 
-# Setup 3 caches, one for
-# 1. results
-# 2. query statistics
-# 3. location utc_offsets
-#
-# 1 & 2 should have expiring items
-query_results = redis.from_url(os.environ.get('REDIS_URL'), 0)
-query_counter = redis.from_url(os.environ.get('REDIS_URL'), 1)
-
-def calculate_expiration_time(near):
-    locache_url = 'https://locache.herokuapp.com/'
-
-    r = requests.get(locache_url, params={'location': near})
-    utc_offset = r.json().get('utcOffset')
-
-    if utc_offset is None:
-        warnings.warn('%s?location=%s failed to determine UTC Offset' % (locache_url, near))
-
-    return calculate_timeleft_in_day(utc_offset)
-
-
-def create_cache_key(near, days_from_now=None, sep=':'):
-    # The cache_key pattern is:
-    #     near_normalize + sep + days_from_now
-    # However: google ignores negative dates, which means that the
-    # results for days_from_now = -1 will be the same as
-    # days_from_now = -7, which means there's no reason to cache
-    # these as different results.
-    if (days_from_now is not None and int(days_from_now) < 0) or (days_from_now is None):
-        days_from_now = '0'
-
-    weird_tokens = '!@#$%^&*()_=+,<.>/?;:\'"[]{}|\\'
-    regexp = '[ ' + weird_tokens + ']*'
-
-    near_normalized = re.sub(regexp, '', near).lower()
-
-    return '%s%s%s' % (near_normalized, sep, days_from_now)
-
-def get_showtimes_from_google_and_cache(near, days_from_now, cache_key):
-    try:
-        showtimes = json.dumps(extract_all_theatres_and_showtimes(near, days_from_now))
-        status = 200
-        # populate caches
-        cache_ex = calculate_expiration_time(near)
-        query_results.set(name=cache_key, value=showtimes, ex=cache_ex)
-        query_counter.set(name=cache_key, value=1, ex=cache_ex)
-    except Exception as e:
-        warnings.warn(str(e))
-        showtimes = json.dumps({'error': str(e)})
-        status = 500  # internal server error
-
-    return showtimes, status
-
-def get_showtimes_from_cache(cache_key):
-    # iron_cache stores keys as long strings...
-    showtimes = query_results.get(name=cache_key)
-    if showtimes is not None:
-        query_counter.incr(name=cache_key)
-        status = 200
-        return showtimes, status
-    else:
-        return None, None
+# Setup 2 caches, one for
+#  - local time results
+#  - military time results
+local_time_cache = redis.from_url(os.environ.get('REDIS_URL'), 0)
+military_time_cache = redis.from_url(os.environ.get('REDIS_URL'), 1)
 
 app = Flask(__name__)
+
 @app.route('/')
 def home():
     return """
     <p>main-endpoint:
-     <a href='/movies'>
-        google.com-movies-scraper.herokuapp.com/movies?{near[,date]}
+     <a href='/v2/movies'>
+        google.com-movies-scraper.herokuapp.com/v2/movies?{near[, date, militaryTime]}
      </a>
     </p>
     <p>docs (apiary.io):
@@ -98,33 +37,151 @@ def route_to_apiary():
     apiary_io = 'http://docs.googlemoviesscraper.apiary.io/'
     return (redirect(apiary_io, code=302))
 
-@app.route('/movies', methods=['GET'])
-def get_showtimes():
+
+def calculate_expiration_time(near):
+    locache_url = 'https://locache.herokuapp.com/'
+
+    r = requests.get(locache_url, params={'location': near})
+    utc_offset = r.json().get('utcOffset')
+
+    if utc_offset is None:
+        warnings.warn('%s?location=%s failed to determine UTC Offset' % (locache_url, near))
+
+    return calculate_timeleft_in_day(utc_offset)
+
+
+class MoviesEndpoint:
+    def __init__(self, near, days_from_now, use_military_time,
+                 local_time_cache=local_time_cache,
+                 military_time_cache=military_time_cache):
+        self.response = None
+        self.showtimes = None
+        self.mimetype = 'application/json'
+        self.local_time_cache = local_time_cache
+        self.military_time_cache = military_time_cache
+
+        # fail fast
+        if near is None:
+            self.status = 400
+            self.response = Response(json.dumps({'error': 'need to specify `near` parameter'}),
+                                     status=self.status,
+                                     mimetype=self.mimetype)
+            return None
+
+        self.near = near
+
+        if days_from_now is not None:
+            # if not None then request.args holds 'date' as a string and thus it needs to
+            # be case as an integer
+            try:
+                # google ignores negative dates, which means that the
+                # results for days_from_now = -1 will be the same as
+                # days_from_now = -7, which means there's no reason to cache
+                # these as different results.
+                days_from_now = int(days_from_now)
+                if days_from_now < 0:
+                    days_from_now = 0
+            except ValueError:
+                self.status = 400
+                self.response = Response(json.dumps({'error': '`date` must be a base-10 integer'}),
+                                         status=self.status,
+                                         mimetype=self.mimetype)
+                return None
+        else:
+            days_from_now = 0
+
+        self.days_from_now = days_from_now
+
+        if use_military_time is not None and not use_military_time.lower() in ['true', 'false']:
+            self.status = 400
+            self.response = Response(json.dumps({'error': '`militaryTime` must be either true or false'}),
+                                     status=self.status,
+                                     mimetype=self.mimetype)
+            return None
+        elif use_military_time is None or use_military_time.lower() == 'false':
+            use_military_time = False
+        elif use_military_time.lower() == 'true':
+            use_military_time = True
+
+        self.use_military_time = use_military_time
+
+        self.create_cache_key()
+
+    def create_cache_key(self, sep=':'):
+        # The cache_key pattern is:
+        #     near_normalize + sep + days_from_now
+        regexp = '[\s!@#$%^&*()_=+,<.>/?;:\'"{}\[\]\\|]*'
+        near_normalized = re.sub(regexp, '', self.near).lower()
+        self.cache_key = '%s%s%s' % (near_normalized, sep, self.days_from_now)
+        return self.cache_key
+
+    def get_showtimes_from_google(self):
+        try:
+            url = 'http://google.com/movies'
+            params = {
+                'near': self.near,
+                'date': self.days_from_now
+            }
+
+            self.googlemovies = GoogleMovies(url, params)
+            self.populate_caches()
+
+            self.showtimes = json.dumps(self.googlemovies.to_json(self.use_military_time))
+            self.status = 200
+            self.response = Response(self.showtimes, status=self.status, mimetype=self.mimetype)
+
+        except Exception as e:
+            warnings.warn(str(e))
+            self.status = 500  # server error
+            self.response = Response(json.dumps({'error': str(e)}), status=self.status, mimetype=self.mimetype)
+
+        return self.response
+
+    def populate_caches(self):
+        if self.cache_key:
+            cache_ex = calculate_expiration_time(self.near)
+            self.local_time_cache.set(name=self.cache_key,
+                                      value=self.googlemovies.to_json(use_military_time=False),
+                                      ex=cache_ex)
+            self.military_time_cache.set(name=self.cache_key,
+                                         value=self.googlemovies.to_json(use_military_time=True),
+                                         ex=cache_ex)
+        else:
+            return False
+
+    def get_showtimes_from_cache(self):
+        if self.use_military_time:
+            self.showtimes = self.military_time_cache.get(self.cache_key)
+        else:
+            self.showtimes = self.local_time_cache.get(self.cache_key)
+
+        if self.showtimes is None:
+            return None
+
+        self.status = 200
+        self.response = Response(self.showtimes, status=self.status, mimetype=self.mimetype)
+        return self
+
+@app.route('/v2/movies', methods=['GET'])
+def serve_movies():
     near = request.args.get('near')
     days_from_now = request.args.get('date')
-    mimetype = 'application/json'
+    use_military_time = request.args.get('militaryTime')
 
-    # fail fast
-    if near is None:
-        showtimes = json.dumps({'error': 'need to specify `near` parameter'})
-        status = 400
-    else:
-        try:
-            cache_key = create_cache_key(near, days_from_now)
-        except ValueError as ve:
-            warnings.warn(str(ve))
-            return Response(json.dumps({'error': '`date` must be a base-10 integer'}),
-                            status=400,
-                            mimetype=mimetype)
+    endpoint = MoviesEndpoint(near, days_from_now, use_military_time)
 
-        showtimes, status = get_showtimes_from_cache(cache_key)
+    # endpoint.response is not None if initialization errored in some way
+    if endpoint.response:
+        return endpoint.response
 
-        if showtimes is not None:
-            warnings.warn('Fetched results from cache with name: ' + cache_key)
-        else:
-            showtimes, status = get_showtimes_from_google_and_cache(near, days_from_now, cache_key)
+    if endpoint.get_showtimes_from_cache():
+        warnings.warn('Fetched results from cache with name: ' + endpoint.cache_key)
+        return endpoint.response
 
-    return Response(showtimes, status=status, mimetype=mimetype)
+    if endpoint.get_showtimes_from_google():
+        return endpoint.response
+
+    return "Something went terribly wrong... =("
 
 if (__name__ == '__main__'):
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)
