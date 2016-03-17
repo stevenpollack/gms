@@ -6,6 +6,7 @@ class Movie:
     def __init__(self, movie_html):
         self.warnings = []
         self.name = movie_html.select_one('.name').get_text(strip=True)
+        self.name = re.sub('\s{2,}', ' ', self.name)
         self.url = movie_html.select_one('.name a').attrs.get('href')
 
         self.id = None
@@ -156,7 +157,9 @@ class Theatre:
             else:
                 self.warnings.append('could not scrape theater id (tid)')
 
+        # collect name and then strip unnecessary white spaces
         self.name = theatre_name_a.get_text(strip=True)
+        self.name = re.sub('\s{2,}', ' ', self.name)
 
         self.info = self.desc.select_one('.info').get_text(strip=True)
 
