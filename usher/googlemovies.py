@@ -42,11 +42,13 @@ class GoogleMovies:
 
         # extract the link to the next page
         self.next_href = None
-        navbar = bs.body.find(id="navbar").select('td a')
-        for td_a in navbar:
-            if re.search('Next', td_a.get_text(strip=True)):
-                self.next_href = next_href_domain + td_a.attrs['href']
-                break
+        navbar = bs.body.find(id="navbar")
+        # if there actually is a navbar, scrape it
+        if navbar:
+            for td_a in navbar.select('td a'):
+                if re.search('Next', td_a.get_text(strip=True)):
+                    self.next_href = next_href_domain + td_a.attrs['href']
+                    break
 
         self.crawled_urls.append(crawled_url)
 

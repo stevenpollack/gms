@@ -29,6 +29,14 @@ class TestGoogleMovies:
         assert googlemovies.crawled_urls == ['usher/tests/gutersloh_showtimes_test_1.html',
                                              'usher/tests/gutersloh_showtimes_test_2.html']
 
+    def test_crawl_with_only_one_page(self):
+        starting_url = 'usher/tests/single_crawl_test.html'
+        googlemovies = GoogleMovies(starting_url, None, True, 'crawl')
+        assert len(googlemovies.movie_results) == 1 # 1 theatre
+        assert len(googlemovies.movie_results[0].showtimes) == 2 # with 2 movies
+        assert googlemovies.title_bar == 'Showtimes for Hinsdale, Mt'
+        assert googlemovies.crawled_urls == [starting_url]
+
     def test_web_crawl(self):
         starting_url = 'http://google.com/movies'
         params = {"near": "Los Angelos"}
