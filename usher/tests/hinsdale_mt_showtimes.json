@@ -1,0 +1,27 @@
+{
+    "info": "600 2nd Avenue South, Glasgow, MT, United States - (406) 228-9239",
+    "name": "Valley Cinema 2",
+    "showtimes": [
+        {
+            "mid": "1cbef1477059f48a",
+            "info": "Rated PG‎‎ - Animation/Action/Adventure‎ - Trailer - IMDb",
+            "name": "Zootopia",
+            "runtime": 108,
+            "times": ["16:10", "19:10", "21:20"],
+            "url": "/movies?near=Hinsdale,+MT&stok=ABAPP2sK14mEEhteuAHszUkwJCmDmFbZHg:1458144091556&mid=1cbef1477059f48a",
+            "warnings": []
+        },
+        {
+            "mid": "673976aa4675ffe1",
+            "info": "Rated PG-13‎‎ - Drama/Family‎ - Trailer - IMDb",
+            "name": "Risen",
+            "runtime": 107,
+            "times": ["10:00", "11:00", "16:00", "19:00", "21:15"],
+            "url": "/movies?near=Hinsdale,+MT&stok=ABAPP2sK14mEEhteuAHszUkwJCmDmFbZHg:1458144091556&mid=673976aa4675ffe1",
+            "warnings": []
+        }
+    ],
+    "tid": null,
+    "url": null,
+    "warnings": ["could not scrape theatre url"]
+}

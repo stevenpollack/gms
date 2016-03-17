@@ -1,0 +1,37 @@
+{
+  "info": "10 Dundas Street East, Toronto, ON, Canada - (416) 977-9262",
+  "name": "Cineplex Cinemas Yonge-Dundas",
+  "showtimes": [
+    {
+      "mid": "7b17035926c6c3bb",
+      "info": "Rated PG - Animation - English - Trailer - IMDb",
+      "name": "Kung Fu Panda 3 3D",
+      "runtime": 95,
+      "times": [
+        "11:40",
+        "14:10",
+        "18:50",
+        "21:10"
+      ],
+      "url": "/movies?near=toronto&mid=7b17035926c6c3bb",
+      "warnings": []
+    },
+    {
+      "mid": "cd05fc45e45fa907",
+      "info": "Horror - English - Trailer - IMDb",
+      "name": "The Witch",
+      "runtime": 90,
+      "times": [
+        "13:35",
+        "15:55",
+        "20:25",
+        "22:40"
+      ],
+      "url": "/movies?near=toronto&mid=cd05fc45e45fa907",
+      "warnings": []
+    }
+  ],
+  "tid": "9a1ebb13e8f116ff",
+  "url": "/movies?near=toronto&tid=9a1ebb13e8f116ff",
+  "warnings": []
+}
