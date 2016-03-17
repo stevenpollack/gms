@@ -1,6 +1,6 @@
 swagger: "2.0"
 info:
-  version: 1.0.0
+  version: 2.0.0
   title: google-movies-scraper
   description: A simple API to scrape [google.com/movies](http://google.com/movies).
     The API currently only accepts the `near` and `date` parameters that one would see
@@ -8,11 +8,11 @@ info:
     <br/><br/>
     The intended use of this service is to copy all
     of the URL proceeding `/movies` and paste it behind 
-    [google-movies-scraper.herokuapp.com/movies](http://google-movies-scraper.herokuapp.com/movies),
+    [google-movies-scraper.herokuapp.com/v2/movies](http://google-movies-scraper.herokuapp.com/movies),
     and then lo-and-behold! A JSON reformatting of all the movies you could see from the
     google.com/movies call. E.g.
     
-      > http://google-movies-scraper.herokuapp.com/movies?near=Hinsdale%20Montana&date=2
+      > http://google-movies-scraper.herokuapp.com/v2/movies?near=Hinsdale%20Montana&date=2
     
     
     yields an array of JSON objects representing everything you'd see at
@@ -37,107 +37,105 @@ produces:
 definitions:
   Showtime:
     type: string
-    description: colon-separated, military time, 24H (e.g. HH:MM)
+    description: time-stamp. Sometimes in 24-hour clock, sometimes in 12.
+      It depends on the locale and whether `militaryTime` is true or false.
     example: '17:20'
   Movie:
     required:
       - name
-      - showtimes
-      - warning_thrown
+      - times
+      - warnings
+      - runtime
+      - info
+      - url
     properties:
       name:
         type: string
-        example: Kungfu Panda 3
+        example: 'Kungfu Panda 3'
       mid:
         type: string
         description: google.com/movie's 'movie id' for a particular movie.
-        example: f119bc480
-      misc_info:
+        example: 'f119bc480'
+      info:
         type: string
-        description: Anything that follows a second '-' in the sub-header of a movie.
+        description: Anything that follows a second '-' `info` div of a movie.
           This is typically the movie genre, for North American releases.
         example: Comedy/Romance - Trailer - IMDb
-      rating:
-        type: string
-        default: ""
-        example: "Rated R"
       runtime:
         type: integer
         default: 0
         description: This is parsed value that sometimes isn't available.
           If it cannot be parsed, the value of 0 is returned.
         example: 110
-      showtimes:
+      times:
         type: array
-        items:
-          $ref: '#/definitions/Showtime'
+        items: 
+          type: string
         default: []
         example: ['12:45', '13:30']
       url:
         type: string
-        default: ""
+        x-isnullable: true
         description: The url associated to a particular movie (and potentially theatre)
           returned from a particular crawl.
         example: '/movies?near=Hinsdale+MT&date=4&mid=e65f11b56eee1b30'
-      warning_thrown:
-        type: boolean
-        description: returns false if any of the parsed values triggered warnings.
-          You should double check the properties of an object with a value of false.
+      warnings:
+        type: array
+        items: 
+          type: string
+        default: []
+        example: ["couldn't extract hours from First Graders preceded by Two Solutions for One Problem and Solution No. 1's runtime"]
+        description: any warnings thrown during the parsing of the movie
+          are stored here.
   Theatre:
     required:
       - name
-      - warning_thrown
-      - program
+      - warnings
+      - showtimes
+      - url
+      - tid
+      - info
     properties:
-      address:
+      info:
         type: string
-        example: 20 rue du Temple, Paris, France
-        description: the parsed address (assumed to be in sub-header, below theatre name).
-          This value can be empty.
-        default: ''
+        example: '600 2nd Avenue South, Glasgow, MT, United States - (406) 228-9239'
+        description: the contents of the `theatre.info` div in the google.com/movies html.
+          This typically contains the address and phone number of the theatre.
       name:
         type: string
         example: Cineplex Odeon Latin Quarter Cinemas
-      phone_number:
-        type: string
-        description: extracted from sub-header, below theatre name. This value can be empty.
-        default: ''
-        example: (514) 849-2244
-      program:
+      showtimes:
         type: array
         items:
           $ref: '#/definitions/Movie'
       tid:
         type: string
         x-isnullable: true
-        example: 43b016ae8041178e
+        example: '43b016ae8041178e'
         description: extracted from <a> surrounding theatre name. If only one theatre is
           returned from a query, this value will be null (since google won't wrap the theatre
           in an <a>)
       url:
         type: string
-        default: ''
+        x-isnullable: true
         description: extracted from <a> surrounding theatre name. If only one theatre is
-          returned from a query, this value will be empty (since google won't wrap the theatre
+          returned from a query, this value will be null (since google won't wrap the theatre
           in an <a>).
-      warning_thrown:
-        type: boolean
-        description: will return a false if any part of the theatre info extraction process
-          triggered a warning. In said case, you should double check the object's properties.
-  Error:
-    required:
-      - code
-      - message
-    properties:
-      code:
-        type: integer
-        format: int32
-      message:
-        type: string
+      warnings:
+        type: array
+        items: 
+          type: string
+        default: []
+        example: ['could not scrape theatre url']
+        description: any warnings thrown during the parsing of the theatre
+          are stored here.
+          
 paths:
-  /movies:
+  /v2/movies:
     get:
-      description: Return all theatres (and their showtimes) displayed in a call to google.com/movies.
+      description: Return all theatres (and their showtimes) displayed in a call to
+        google.com/movies. The structure of the return is meant to follow the classes found in
+        the returned html of google.com/movies.
       parameters:
         - name: near
           in: query
@@ -151,16 +149,17 @@ paths:
           type: integer
           format: int32
           default: 0
+        - name: militaryTime
+          in: query
+          description: should timestamps be converted to military time
+            (24-hour clock) or left as is?
+          type: boolean
+          default: false
+          
       responses:
-
         400:
-          description: Missing Parameter -- You've failed to specify `near` in the query string.
-          schema:
-            type: object
-          examples: {
-              "error": "need to specify 'near' parameter"
-            }
-        
+          description: Missing or Misspecified Parameter.
+          
         500:
           description: Internal Error -- Something went wrong during the scrape.
             This is probably a consequence of the CSS selection rules. Either one of
@@ -173,8 +172,3 @@ paths:
             type: array
             items:
               $ref: '#/definitions/Theatre'
-        
-        default:
-          description: unexpected error
-          schema:
-            $ref: '#/definitions/Error'
