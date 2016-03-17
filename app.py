@@ -1,7 +1,7 @@
-import os, re, redis, requests, warnings
+import os, re, redis, warnings
 from flask import Flask, request, json, Response, redirect
 from usher.googlemovies import GoogleMovies
-from localization_functions import calculate_timeleft_in_day
+from localization_functions import calculate_expiration_time
 
 # Setup 2 caches, one for
 #  - local time results
@@ -36,19 +36,6 @@ def home():
 def route_to_apiary():
     apiary_io = 'http://docs.googlemoviesscraper.apiary.io/'
     return (redirect(apiary_io, code=302))
-
-
-def calculate_expiration_time(near):
-    locache_url = 'https://locache.herokuapp.com/'
-
-    r = requests.get(locache_url, params={'location': near})
-    utc_offset = r.json().get('utcOffset')
-
-    if utc_offset is None:
-        warnings.warn('%s?location=%s failed to determine UTC Offset' % (locache_url, near))
-
-    return calculate_timeleft_in_day(utc_offset)
-
 
 class MoviesEndpoint:
     def __init__(self, near, days_from_now, use_military_time,
@@ -129,7 +116,6 @@ class MoviesEndpoint:
             self.showtimes = json.dumps(self.googlemovies.to_json(self.use_military_time))
             self.status = 200
             self.response = Response(self.showtimes, status=self.status, mimetype=self.mimetype)
-
         except Exception as e:
             warnings.warn(str(e))
             self.status = 500  # server error
