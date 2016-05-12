@@ -63,10 +63,10 @@ class MoviesEndpoint:
         if self.response:
             return self.response
 
-        if self.get_showtimes_from_cache():
+        """if self.get_showtimes_from_cache():
             warnings.warn('Fetched results from cache with name: ' + self.cache_key)
             return self.response
-
+        """
         if self.get_showtimes_from_google():
             return self.response
 

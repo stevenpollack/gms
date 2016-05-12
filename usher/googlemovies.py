@@ -34,8 +34,17 @@ class GoogleMovies:
 
         bs = BeautifulSoup(html, 'html.parser')
 
+        """
+        figure out neo4j situation here -- move later
+        """
+        #googlemovies = self.googlemovies
+        import os
+        from py2neo import Graph
+        graphenedb_url = os.environ.get('NEO4J_SANDBOX', 'http://localhost:7474/')
+        neo4j_graph = Graph(graphenedb_url)
+
         movie_results = bs.body.select_one('.movie_results')
-        [self.movie_results.append(Theatre(theatre)) for theatre in movie_results.select('.theater')]
+        [self.movie_results.append(Theatre(theatre, neo4j_graph)) for theatre in movie_results.select('.theater')]
 
         if self.title_bar is None:
             self.title_bar = bs.body.find(id="title_bar").get_text(strip=True)

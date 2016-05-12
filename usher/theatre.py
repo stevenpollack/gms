@@ -1,9 +1,10 @@
 import warnings, re
 from datetime import datetime, timedelta
+from py2neo import Graph, Node, Relationship
 
 
 class Movie:
-    def __init__(self, movie_html):
+    def __init__(self, movie_html, neo4j_graph=None, theatre_node=None):
         self.warnings = []
         self.name = movie_html.select_one('.name').get_text(strip=True)
         self.name = re.sub('\s{2,}', ' ', self.name)
@@ -31,6 +32,40 @@ class Movie:
 
         self.process_runtime()
         self.process_times()
+
+        if isinstance(neo4j_graph, Graph) and isinstance(theatre_node, Node):
+
+            #neo4j_graph.begin()
+            movie_node = Node("Movie",
+                              name=self.name,
+                              mid=self.id,
+                              runtime=self.runtime,
+                              info=self.info)
+            # neo4j_graph.delete_all()
+            try:
+                neo4j_graph.schema.create_index("Movie", "mid")
+                neo4j_graph.schema.create_index("Theatre", "tid")
+            except:
+                pass
+
+            tx = neo4j_graph.begin() # autocommit == False
+            tx.merge(movie_node)
+            tx.merge(theatre_node)
+            import random
+            rels = []
+            for local, military in zip(self.times, self.military_times):
+                rel = Relationship(movie_node, "PLAYS_IN", theatre_node)
+                rel['fake_id'] = random.normalvariate(mu=0, sigma=1)
+                rel['time_local'] = local
+                rel['time_24h'] = military
+                rels.append(rel)
+
+            [tx.merge(rel) for rel in rels]
+            tx.commit()
+            print(1)
+            """neo4j_graph.run(
+                "MATCH (a:Movie {mid:'" + self.id + "'})," + "(b:Theatre {tid:'" + theatre_node['tid'] + "'}) MERGE (a)-[:PLAYS_IN {time_local:'" + local + "',time_24h:'" + military + "'}]->(b)"
+            )"""
 
     def process_runtime(self):
         hours = 0
@@ -64,6 +99,8 @@ class Movie:
                 self.warnings.append("Couldn't extract showtime from input " + extracted_time)
 
         self.times = times
+        self.create_military_times()
+
         return self
 
     def create_military_times(self):
@@ -111,21 +148,22 @@ class Movie:
 
 
 class Showtimes(list):
-    def __init__(self, showtimes_html):
+    def __init__(self, showtimes_html, neo4j_graph=None, theatre_node=None):
         for movie_html in showtimes_html.select('.movie'):
-            self.append(Movie(movie_html))
+            self.append(Movie(movie_html, neo4j_graph, theatre_node))
 
     def to_json(self, use_military_time=False):
         return [movie.to_json(use_military_time) for movie in self]
 
 
 class Theatre:
-    def __init__(self, theatre_html):
+    def __init__(self, theatre_html, neo4j_graph=None):
         self.warnings = []
         self.desc = theatre_html.select_one('.desc')
-        self.showtimes = Showtimes(theatre_html.select_one('.showtimes'))
-
         self.process_desc()
+        self.showtimes = Showtimes(theatre_html.select_one('.showtimes'),
+                                   neo4j_graph,
+                                   self.theatre_node)
 
     def process_desc(self):
         # when scraping CSS the use of the tag name in `select` can be
@@ -163,7 +201,16 @@ class Theatre:
 
         self.info = self.desc.select_one('.info').get_text(strip=True)
 
+        # create neo4j node for the theatre
+        self.theatre_node = Node("Theatre",
+                                 name=self.name,
+                                 info=self.info,
+                                 warnings=self.warnings,
+                                 tid=self.id)
         return self
+
+    def to_neo4j_subgraph(self, use_military_time=False):
+        pass
 
     def to_json(self, use_military_time=False):
         return {
