@@ -1,7 +1,7 @@
 import warnings, re
 from datetime import datetime, timedelta
 from py2neo import Graph, Node, Relationship
-
+from string import Template
 
 class Movie:
     def __init__(self, movie_html, neo4j_graph=None, theatre_node=None):
@@ -43,26 +43,39 @@ class Movie:
                               info=self.info)
             # neo4j_graph.delete_all()
             try:
-                neo4j_graph.schema.create_index("Movie", "mid")
-                neo4j_graph.schema.create_index("Theatre", "tid")
+                pass
+                #neo4j_graph.schema.create_index("Movie", "mid")
+                #neo4j_graph.schema.create_index("Theatre", "tid")
+                # probably want to cache on relationships?
             except:
                 pass
 
             tx = neo4j_graph.begin() # autocommit == False
             tx.merge(movie_node)
             tx.merge(theatre_node)
-            import random
-            rels = []
-            for local, military in zip(self.times, self.military_times):
-                rel = Relationship(movie_node, "PLAYS_IN", theatre_node)
-                rel['fake_id'] = random.normalvariate(mu=0, sigma=1)
-                rel['time_local'] = local
-                rel['time_24h'] = military
-                rels.append(rel)
 
-            [tx.merge(rel) for rel in rels]
+            merge_cql = """
+            MATCH (m:Movie), (t:Theatre)
+            WHERE m.mid = '{mid}' AND t.tid = '{tid}'
+            """.format(mid=movie_node['mid'], tid=theatre_node['tid'])
+
+            merge_template = Template("""
+            MERGE (m)-[r:PLAYS_IN {time_local: "$local", time_24h: "$military"}]->(t)
+            ON CREATE SET r.cache_keys = ["$cache_key"]
+            ON MATCH SET r.cache_keys =
+                CASE WHEN "$cache_key" IN r.cache_keys THEN r.cache_keys
+                    ELSE r.cache_keys + ["$cache_key"]
+                END
+            WITH m, t
+            """)
+
+            for local, military in zip(self.times, self.military_times):
+                merge_cql += merge_template.safe_substitute(local=local, military=military, cache_key="sf-1")
+
+            tx.run(merge_cql + "RETURN true")
+            #print(merge_cql)
             tx.commit()
-            print(1)
+            #print(1)
             """neo4j_graph.run(
                 "MATCH (a:Movie {mid:'" + self.id + "'})," + "(b:Theatre {tid:'" + theatre_node['tid'] + "'}) MERGE (a)-[:PLAYS_IN {time_local:'" + local + "',time_24h:'" + military + "'}]->(b)"
             )"""
