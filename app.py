@@ -1,5 +1,9 @@
-import os, redis, warnings
+import os
+import redis
+
 from flask import Flask, request, redirect
+from py2neo import Graph
+
 from usher.movies_endpoint import MoviesEndpoint
 
 # Setup 2 caches, one for
@@ -8,6 +12,11 @@ from usher.movies_endpoint import MoviesEndpoint
 local_time_cache = redis.from_url(os.environ.get('REDIS_URL'), 0)
 military_time_cache = redis.from_url(os.environ.get('REDIS_URL'), 1)
 
+# graph_uri = "https://neo_heroku_ashlee_beer_sandybrown:MqahWpVx8IMH9sEPHFvmaDkzWvLNAWGyJFVO5eKN@neo-heroku-ashlee" \
+#            "-beer-sandybrown.digital-ocean.graphstory.com:7473"  # + "/db/data/"
+graph_uri = "https://localhost:7474"
+neo4j_graph = Graph(graph_uri, bolt=False, secure=False)
+
 app = Flask(__name__)
 
 
@@ -15,8 +24,8 @@ app = Flask(__name__)
 def home():
     return """
     <p>main-endpoint:
-     <a href='/v2/movies'>
-        google.com-movies-scraper.herokuapp.com/v2/movies?{near[, date, militaryTime]}
+     <a href='/v3/movies'>
+        google.com-movies-scraper.herokuapp.com/v3/movies?{near[, date]}
      </a>
     </p>
     <p>docs (apiary.io):
@@ -36,13 +45,13 @@ def route_to_apiary():
     apiary_io = 'http://docs.googlemoviesscraper.apiary.io/'
     return (redirect(apiary_io, code=302))
 
-@app.route('/v2/movies', methods=['GET'])
+
+@app.route('/v3/movies', methods=['GET'])
 def serve_movies():
     near = request.args.get('near')
     days_from_now = request.args.get('date')
-    use_military_time = request.args.get('militaryTime')
 
-    endpoint = MoviesEndpoint(near, days_from_now, use_military_time, local_time_cache, military_time_cache)
+    endpoint = MoviesEndpoint(near, days_from_now, local_time_cache, neo4j_graph)
     return endpoint.process_request()
 
 if (__name__ == '__main__'):

@@ -9,7 +9,7 @@
       {
         "name": "London Has Fallen",
         "times": [
-          "20:15"
+          1215
         ],
         "mid": "e26c6be0be6e3f7f",
         "runtime": 99,
@@ -30,7 +30,7 @@
         "mid": "78bce368cd17653",
         "name": "Das Tagebuch der Anne Frank",
         "times": [
-          "17:30"
+          1050
         ]
       }
     ],

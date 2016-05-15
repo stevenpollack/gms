@@ -1,9 +1,51 @@
-import warnings, re
+import re
+import warnings
 from datetime import datetime, timedelta
-from py2neo import Graph, Node, Relationship
 from string import Template
 
+from py2neo import Node
+
+
 class Movie:
+    node_merge_template = Template("""
+MERGE (`$name`:Movie {
+    mid: '$mid',
+    info: '$info',
+    name: '$name',
+    runtime: $runtime
+})
+WITH t, `$name` as m""")
+
+    rel_merge_template = Template("""
+MERGE (m)-[r:PLAYS_IN {time: $mins}]->(t)
+ON CREATE SET r.cache_keys = [ '$cache_key' ]
+ON MATCH SET r.cache_keys = [ '$cache_key' ] + FILTER(x IN r.cache_keys WHERE x <> '$cache_key')""")
+
+    def fill_in_node_merge_template(self):
+        if not isinstance(self.node_merge_template, Template):
+            return Template(self.node_merge_template)
+
+        self.node_merge_template = self.node_merge_template.safe_substitute(name=self.name,
+                                                                            mid=self.id,
+                                                                            info=self.info,
+                                                                            runtime=self.runtime,
+                                                                            url=self.url,
+                                                                            warnings=self.warnings)
+        return self.node_merge_template
+
+    def create_movie_cql_query(self):
+        if not isinstance(self.rel_merge_template, Template):
+            return self.rel_merge_template
+
+        self.fill_in_node_merge_template()
+
+        output = []  # [self.node_merge_template]
+        for mins in self.times_mins:
+            output.append(self.rel_merge_template.safe_substitute(mins=mins))
+
+        self.rel_merge_template = self.node_merge_template + '\nWITH t, m'.join(output)
+        return self.rel_merge_template
+
     def __init__(self, movie_html, neo4j_graph=None, theatre_node=None):
         self.warnings = []
         self.name = movie_html.select_one('.name').get_text(strip=True)
@@ -21,21 +63,21 @@ class Movie:
                 self.warnings.append('could not scrape movie id (mid)')
 
         self.times = movie_html.select_one('.times')
-        self.military_times = None
+        self.times_mins = None
 
         info = movie_html.select_one('.info').get_text(strip=True).split(' - ', 1)
         self.runtime = info[0]
         try:
             self.info = info[1]
-        except IndexError: # situation where no extra info is provided
+        except IndexError:  # situation where no extra info is provided
             self.info = None
 
         self.process_runtime()
         self.process_times()
 
-        if isinstance(neo4j_graph, Graph) and isinstance(theatre_node, Node):
+        if False:  # not isinstance(neo4j_graph, Graph) and isinstance(theatre_node, Node):
 
-            #neo4j_graph.begin()
+            # neo4j_graph.begin()
             movie_node = Node("Movie",
                               name=self.name,
                               mid=self.id,
@@ -44,13 +86,13 @@ class Movie:
             # neo4j_graph.delete_all()
             try:
                 pass
-                #neo4j_graph.schema.create_index("Movie", "mid")
-                #neo4j_graph.schema.create_index("Theatre", "tid")
+                # neo4j_graph.schema.create_index("Movie", "mid")
+                # neo4j_graph.schema.create_index("Theatre", "tid")
                 # probably want to cache on relationships?
             except:
                 pass
 
-            tx = neo4j_graph.begin() # autocommit == False
+            tx = neo4j_graph.begin()  # autocommit == False
             tx.merge(movie_node)
             tx.merge(theatre_node)
 
@@ -59,26 +101,12 @@ class Movie:
             WHERE m.mid = '{mid}' AND t.tid = '{tid}'
             """.format(mid=movie_node['mid'], tid=theatre_node['tid'])
 
-            merge_template = Template("""
-            MERGE (m)-[r:PLAYS_IN {time_local: "$local", time_24h: "$military"}]->(t)
-            ON CREATE SET r.cache_keys = ["$cache_key"]
-            ON MATCH SET r.cache_keys =
-                CASE WHEN "$cache_key" IN r.cache_keys THEN r.cache_keys
-                    ELSE r.cache_keys + ["$cache_key"]
-                END
-            WITH m, t
-            """)
-
-            for local, military in zip(self.times, self.military_times):
-                merge_cql += merge_template.safe_substitute(local=local, military=military, cache_key="sf-1")
+            for local, military in zip(self.times, self.times_mins):
+                merge_cql += rel_merge_template.safe_substitute(local=local, military=military, cache_key="sf-1")
 
             tx.run(merge_cql + "RETURN true")
-            #print(merge_cql)
+            # print(merge_cql)
             tx.commit()
-            #print(1)
-            """neo4j_graph.run(
-                "MATCH (a:Movie {mid:'" + self.id + "'})," + "(b:Theatre {tid:'" + theatre_node['tid'] + "'}) MERGE (a)-[:PLAYS_IN {time_local:'" + local + "',time_24h:'" + military + "'}]->(b)"
-            )"""
 
     def process_runtime(self):
         hours = 0
@@ -112,21 +140,20 @@ class Movie:
                 self.warnings.append("Couldn't extract showtime from input " + extracted_time)
 
         self.times = times
-        self.create_military_times()
+        self.convert_times_to_mins()
 
         return self
 
-    def create_military_times(self):
-
+    def convert_times_to_mins(self):
         # set up idempotency
-        if self.military_times:
-            return self.military_times
+        if self.times_mins:
+            return self.times_mins
 
         # check to see that times aren't already in military format
         dt_list = [datetime.strptime(time, '%H:%M') for time in self.times]
         if any([dt.hour > 12 for dt in dt_list]):
-            self.military_times = self.times
-            return self.military_times
+            self.times_mins = [dt.hour * 60 + dt.minute for dt in dt_list]
+            return self.times_mins
 
         # heuristic: assume all times are AM, look for where monotonicity is violated
         monotonic_check = [time1 < time2 for time1, time2 in zip(dt_list, dt_list[1:])]
@@ -139,23 +166,19 @@ class Movie:
             # all values are monotonically increasing... so all must be in the PM.
             military_times = [dt + timedelta(hours=12) for dt in dt_list]
 
-        self.military_times = [dt.strftime("%H:%M") for dt in military_times]
-        return self.military_times
+        self.times_mins = [dt.hour * 60 + dt.minute for dt in military_times]
+        return self.times_mins
 
-    def to_json(self, use_military_time=False):
+    def to_json(self):
         output = {
             'info': self.info,
             'name': self.name,
             'url': self.url,
             'mid': self.id,
+            'times': self.times_mins,
             'warnings': self.warnings,
             'runtime': self.runtime
         }
-
-        if use_military_time:
-            output['times'] = self.create_military_times()
-        else:
-            output['times'] = self.times
 
         return output
 
@@ -165,18 +188,41 @@ class Showtimes(list):
         for movie_html in showtimes_html.select('.movie'):
             self.append(Movie(movie_html, neo4j_graph, theatre_node))
 
-    def to_json(self, use_military_time=False):
-        return [movie.to_json(use_military_time) for movie in self]
+    def to_json(self):
+        return [movie.to_json() for movie in self]
+
+    def create_movie_cql_queries(self):
+        return [movie.create_movie_cql_query() for movie in self]
 
 
 class Theatre:
-    def __init__(self, theatre_html, neo4j_graph=None):
+    merge_template = Template("""MERGE (`$name`:Theatre {
+    tid: '$tid',
+    info: '$info',
+    name: '$name'
+})
+WITH `$name` as t
+$movie_cql_queries""")
+
+    def create_theatre_cql_query(self):
+
+        if not isinstance(self.merge_template, Template):
+            return Template(self.merge_template)
+
+        movie_cql_queries = self.showtimes.create_movie_cql_queries()
+        self.merge_template = self.merge_template.safe_substitute(name=self.name,
+                                                                  tid=self.id if self.id else "",
+                                                                  info=self.info,
+                                                                  movie_cql_queries=''.join(movie_cql_queries),
+                                                                  url=self.url if self.url else "",
+                                                                  warnings=self.warnings)
+        return self.merge_template
+
+    def __init__(self, theatre_html):
         self.warnings = []
         self.desc = theatre_html.select_one('.desc')
         self.process_desc()
-        self.showtimes = Showtimes(theatre_html.select_one('.showtimes'),
-                                   neo4j_graph,
-                                   self.theatre_node)
+        self.showtimes = Showtimes(theatre_html.select_one('.showtimes'))
 
     def process_desc(self):
         # when scraping CSS the use of the tag name in `select` can be
@@ -214,22 +260,16 @@ class Theatre:
 
         self.info = self.desc.select_one('.info').get_text(strip=True)
 
-        # create neo4j node for the theatre
-        self.theatre_node = Node("Theatre",
-                                 name=self.name,
-                                 info=self.info,
-                                 warnings=self.warnings,
-                                 tid=self.id)
         return self
 
     def to_neo4j_subgraph(self, use_military_time=False):
         pass
 
-    def to_json(self, use_military_time=False):
+    def to_json(self):
         return {
             'info': self.info,
             'name': self.name,
-            'showtimes': self.showtimes.to_json(use_military_time),
+            'showtimes': self.showtimes.to_json(),
             'tid': self.id,
             'url': self.url,
             'warnings': self.warnings

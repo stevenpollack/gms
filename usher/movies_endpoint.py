@@ -1,15 +1,19 @@
+import re
+import warnings
+
 from flask import Response, json
-import re, warnings
+
 from .googlemovies import GoogleMovies
 from .localization_functions import calculate_expiration_time
 
+
 class MoviesEndpoint:
-    def __init__(self, near, days_from_now, use_military_time, local_time_cache, military_time_cache):
+    def __init__(self, near, days_from_now, local_time_cache, neo4j_graph):
         self.response = None
         self.showtimes = None
         self.mimetype = 'application/json'
         self.local_time_cache = local_time_cache
-        self.military_time_cache = military_time_cache
+        self.neo4j_graph = neo4j_graph
 
         # fail fast
         if near is None:
@@ -43,26 +47,13 @@ class MoviesEndpoint:
 
         self.days_from_now = days_from_now
 
-        if use_military_time is not None and not use_military_time.lower() in ['true', 'false']:
-            self.status = 400
-            self.response = Response(json.dumps({'error': '`militaryTime` must be either true or false'}),
-                                     status=self.status,
-                                     mimetype=self.mimetype)
-            return None
-        elif use_military_time is None or use_military_time.lower() == 'false':
-            use_military_time = False
-        elif use_military_time.lower() == 'true':
-            use_military_time = True
-
-        self.use_military_time = use_military_time
-
         self.create_cache_key()
 
     def process_request(self):
         # endpoint.response is not None if initialization errored in some way
         if self.response:
             return self.response
-
+        # UNCOMMENT THIS FOR DEPLOY
         """if self.get_showtimes_from_cache():
             warnings.warn('Fetched results from cache with name: ' + self.cache_key)
             return self.response
@@ -88,10 +79,10 @@ class MoviesEndpoint:
                 'date': self.days_from_now
             }
 
-            self.googlemovies = GoogleMovies(url, params)
+            self.googlemovies = GoogleMovies(url, params, neo4j_graph=self.neo4j_graph, cache_key=self.cache_key)
             self.populate_caches()
 
-            self.showtimes = json.dumps(self.googlemovies.to_json(self.use_military_time))
+            self.showtimes = json.dumps(self.googlemovies.to_json())
             self.status = 200
             self.response = Response(self.showtimes, status=self.status, mimetype=self.mimetype)
         except Exception as e:
@@ -105,19 +96,14 @@ class MoviesEndpoint:
         if self.cache_key:
             cache_ex = calculate_expiration_time(self.near)
             self.local_time_cache.set(name=self.cache_key,
-                                      value=json.dumps(self.googlemovies.to_json(use_military_time=False)),
+                                      value=json.dumps(self.googlemovies.to_json()),
                                       ex=cache_ex)
-            self.military_time_cache.set(name=self.cache_key,
-                                         value=json.dumps(self.googlemovies.to_json(use_military_time=True)),
-                                         ex=cache_ex)
         else:
             return False
 
     def get_showtimes_from_cache(self):
-        if self.use_military_time:
-            self.showtimes = self.military_time_cache.get(self.cache_key)
-        else:
-            self.showtimes = self.local_time_cache.get(self.cache_key)
+
+        self.showtimes = self.local_time_cache.get(self.cache_key)
 
         if self.showtimes is None:
             return None
